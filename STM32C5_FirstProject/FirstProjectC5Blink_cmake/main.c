@@ -41,15 +41,9 @@
 /* Private define ------------------------------------------------------------*/
 
 /*Configure adc*/
-#define ADC_RESOLUTION      4095 // Max value for 12-bit ADC (2^12 - 1)
-
-#define V_REF               3.3f    // Ref voltage for ADC (3.3V)
-#define DIVIDER_RATIO       2.0f    // Voltage divider ratio (assuming equal resistors, Vout = Vin / 2)
+#define ADC_RESOLUTION      4095    // Max value for 12-bit ADC (2^12 - 1)
 #define ADC_SIZE 10                 // Number of ADC samples to average for voltage measurement
 
-/*Lipo 1s*/
-#define LIPO_MAX_VOLTAGE    4.2f    // Max voltage for fully charged LiPo battery
-#define LIPO_MIN_VOLTAGE    3.2f    // Min safe voltage for LiPo battery
 /* Private macro -------------------------------------------------------------*/
 /* Private variables ---------------------------------------------------------*/
 
@@ -57,13 +51,8 @@
 volatile uint16_t AdcData[ADC_SIZE] = {0};
 uint8_t DataReadyFlag = 0; //ADC data ready flag
 
-
-uint32_t counter = 0;
 volatile uint32_t BatteryVoltage = 0;
-uint8_t BatteryPercentage = 0; // Global variable to hold battery percentage
-
-float v_pin = 0.0f; // Voltage at the ADC pin (after voltage divider)
-uint8_t BatteryEmptyFlag = 0; // Flag to indicate if battery is empty (below minimum voltage)
+uint8_t BatteryPercentage = 0;          // Global variable to hold battery percentage
 
 volatile uint32_t timer_counter = 0;
 
@@ -80,7 +69,8 @@ GameConsole_t Console;
 
 uint8_t value = 0xAE;
 /* Private functions prototype -----------------------------------------------*/
-//batery management
+
+//Battery management
 extern uint8_t ShowBatteryWarning; //from BatteryManagement.c
 void System_ExecuteEmergencyShutdown(void);
 
@@ -151,12 +141,11 @@ int main(void)
 
       GFX_DrawFillRectangle(56, 31, 6, 6, WHITE);
       SSD1306_Display(&OLED);
-      HAL_Delay(4000);
+      HAL_Delay(3000);
 
       //Game console FSM initialization
       Console_Init(&Console);
 
-      //Initialize buttons
       //Initialize Buttons
       ButtonInit(&Up, BUTTON_UP_PORT, BUTTON_UP_PIN, 30, 500, 200);
       ButtonRegisterPressCallback(&Up, Action_MenuUp);
@@ -189,12 +178,10 @@ int main(void)
       ButtonRegisterGoToIdleCallback(&Right, TurnLedOff);
     
       //test and blink led
-      HAL_GPIO_WritePin(LED_PORT, LED_PIN, HAL_GPIO_PIN_SET);
-      HAL_Delay(2000);
-      HAL_GPIO_WritePin(LED_PORT, LED_PIN, HAL_GPIO_PIN_RESET);
-      HAL_Delay(1000);
-
-      //Debug = 0;
+    //   HAL_GPIO_WritePin(LED_PORT, LED_PIN, HAL_GPIO_PIN_SET);
+    //   HAL_Delay(2000);
+    //   HAL_GPIO_WritePin(LED_PORT, LED_PIN, HAL_GPIO_PIN_RESET);
+    //   HAL_Delay(1000);
 
     while (1) 
     {      
@@ -205,7 +192,7 @@ int main(void)
       ButtonTask(&Left);
       ButtonTask(&Right);
 
-      //batery management
+      //Battery management
         if(DataReadyFlag == 1)
       {
         DataReadyFlag = 0; 
@@ -245,74 +232,16 @@ int main(void)
         Console_Draw(&Console, &OLED);
       }
 
-
-
-      //TODO: print battery level warning on OLED
-        // if (ShowBatteryWarning == 1)
-        // {
-        //     // Rysuje małą, inwazyjną flagę w rogu ekranu, żeby gracz wiedział o końcu energii
-        //     GFX_DrawFillRectangle(100, 0, 28, 10, BLACK); // Tło dla czytelności
-        //     GFX_DrawString(102, 2, "LOW!", WHITE, BLACK);
-        //     SSD1306_Display(&OLED); 
-        // }
-
-
-
-
       HAL_Delay(10);
 
     timer_counter = HAL_TIM_GetCounter(mx_tim2_gethandle());
     }
   }
-
-  
- 
 } /* end main */
 
 
 
 //Private functions
-
-/* for now do not make emergency shutdown
-void System_ExecuteEmergencyShutdown(void)
-{
-    __disable_irq();
-
-    SSD1306_Clear(BLACK);
-    GFX_DrawString(10, 20, "BATTERY CRITICAL", WHITE, BLACK);
-    GFX_DrawString(15, 40, "TURN OFF DEVICE", WHITE, BLACK);
-    SSD1306_Display(&OLED);
-
-    for(volatile uint32_t i = 0; i < 5000000; i++) { __NOP(); }
-
-    SSD1306_Command(&OLED, 0xAE); 
-
-    // 1. Dostęp do domeny Backup (RTC, rejestry podtrzymywane). 
-    // W niektórych wersjach HAL2 ta funkcja została przeniesiona do RTC lub zmieniła nazwę.
-    // Najczęstszy współczesny odpowiednik to:
-    //HAL_PWR_EnableBkUpAccess();
-
-    // 2. Czyszczenie flag wybudzenia (WUF - Wake Up Flags).
-    // W nowym HAL-u zazwyczaj czyścimy wszystkie flagi naraz za pomocą funkcji z przyrostkiem Ex (Extended),
-    // lub sprecyzowanego makra dla konkretnego pinu (np. PWR_FLAG_WUF1).
-    // Spróbuj użyć współczesnego standardu:
-#if defined(PWR_WAKEUP_FLAG_ALL)
-    __HAL_PWR_CLEAR_WAKEUP_FLAG(PWR_WAKEUP_FLAG_ALL); // Wariant A (Makro)
-#else
-    // Wariant B (częsty w najnowszych bibliotekach LL/HAL2)
-    // HAL_PWREx_ClearWakeupFlag(PWR_FLAG_WUF); 
-#endif
-
-    // 3. Wejście w tryb Standby.
-    // W HAL2 funkcja ta czasem wymaga jawnego podania sposobu uśpienia krzemu.
-    // Jeśli HAL_PWR_EnterSTANDBYMode() wyrzuca błąd "too few arguments", 
-    // nowa składnia w HAL2 często wygląda tak:
-    // HAL_PWR_EnterSTANDBYMode(PWR_STANDBY_ENTRY_WFI); 
-    HAL_PWR_EnterStandbyMode();
-
-    while(1); 
-}
-*/
 
 void Action_ChangeContrast()
 {
@@ -486,43 +415,24 @@ void HAL_ADC_REG_DataTransferCpltCallback(hal_adc_handle_t *hadc)
 //emergency shutdown
 void System_ExecuteEmergencyShutdown(void)
 {
-    // 1. Zablokowanie przerwań (Zatrzymujemy obsługę Timerów, DMA, itp.)
-   
-
-    // 2. Wizualne ostrzeżenie gracza
+    //Battery criticcal, OLED warning
     SSD1306_Clear(BLACK);
     GFX_DrawString(10, 20, "BATTERY CRITICAL", WHITE, BLACK);
     GFX_DrawString(15, 40, "TURN OFF DEVICE", WHITE, BLACK);
     SSD1306_Display(&OLED);
 
-    // Sprzętowa pętla opóźniająca (~2 sekundy), aby gracz zauważył komunikat
-    HAL_Delay(2000);
+    //delay for user to read warning
+    HAL_Delay(5000);
 
-    // 3. Twarde wygaszenie matrycy OLED
+    //turn off the oled
     SSD1306_Command(&OLED, 0xAE); 
 
-    // ------------------ NOWY STANDARD HAL PWR ------------------
+    // Disable interrupts to prevent any further processing, emergency shutdown is critical
     __disable_irq();
-    // 4. Zabezpieczenie I/O przed wyciekiem prądu (Zjawisko Floating Pins).
-    // Funkcja z linii 618 Twojego pliku. "Zamraża" stan logiczny pinów, 
-    // zapobiegając ucieczce prądu przez podciągnięcia ekranu/przycisków.
     HAL_PWR_LP_EnableIORetention(HAL_PWR_IO_RETENTION_ALL);
-
-    // 5. Wyczyszczenie duchów przeszłości.
-    // Usuwamy stare flagi Standby/Stop, jeśli układ poprzednio z nich wyszedł.
-    // Funkcja z linii 462 Twojego pliku.
     HAL_PWR_CleanPreviousSystemPowerMode();
-
-    // 6. Wyczyszczenie wszystkich flag wybudzenia. 
-    // Jeśli jakikolwiek przycisk wybudzający został wciśnięty wcześniej,
-    // musimy to anulować, inaczej procesor zaśnie i wybudzi się w tej samej mikrosekundzie.
-    // Funkcja z linii 255 Twojego pliku.
     HAL_PWR_LP_CleanWakeupSource(HAL_PWR_WAKEUP_SOURCE_ALL);
-
-    // 7. Śmierć rdzenia i wejście w najgłębszy sen (Wait For Interrupt w domenie Standby)
-    // Funkcja z linii 361 Twojego pliku.
     HAL_PWR_EnterStandbyMode();
 
-    // Wykonanie kodu w architekturze ARM nigdy nie powinno dotrzeć do tego miejsca.
     while(1); 
 }
