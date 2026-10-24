@@ -6,6 +6,8 @@
 
 #define LIPO_MIN_VOLTAGE 3200UL // 3.2V w mV
 #define LIPO_MAX_VOLTAGE 4200UL // 4.2V w m
+
+#define LIPO_CRITICAL_VOLTAGE 3200UL // 3.20V
 /* 
  * ZMIENNE PRYWATNE (static)
  * Niewidoczne dla pliku main.c, nie kolidują z resztą programu.
@@ -78,4 +80,15 @@ uint8_t Calculate_Battery_Percentage(uint32_t battery_voltage_mv)
                         (LIPO_MAX_VOLTAGE - LIPO_MIN_VOLTAGE)) * 100.0f;
 
     return (uint8_t)percentage;
+}
+
+
+uint8_t Battery_IsCritical(void)
+{
+    // Jeśli napięcie zostało już zmierzone (>0) i spadło poniżej progu, zwróć 1 (PRAWDA)
+    if (CurrentBatteryVoltage > 0 && CurrentBatteryVoltage <= LIPO_CRITICAL_VOLTAGE) 
+    {
+        return 1;
+    }
+    return 0;
 }

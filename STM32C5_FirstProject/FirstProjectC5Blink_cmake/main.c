@@ -212,6 +212,11 @@ int main(void)
         Battery_Update((uint16_t*)AdcData, ADC_SIZE);
         BatteryVoltage = Battery_GetVoltage();
         BatteryPercentage = Calculate_Battery_Percentage(BatteryVoltage);   
+
+        if (Battery_IsCritical() == 1)
+        {
+            System_ExecuteEmergencyShutdown();
+        }
       }
 
         //User interface logic
@@ -308,44 +313,6 @@ void System_ExecuteEmergencyShutdown(void)
     while(1); 
 }
 */
-
-/*
-uint8_t Calculate_Battery_Percentage(uint16_t adc_value)
-{
-    // 1. Obliczenie napięcia na wejściu ADC (za dzielnikiem)
-    v_pin = ((float)adc_value / ADC_RESOLUTION) * V_REF;
-    
-    // 2. Obliczenie rzeczywistego napięcia baterii (przed dzielnikiem)
-    float v_battery = v_pin * DIVIDER_RATIO;
-    
-    // 3. Zabezpieczenie przed wartościami poza zakresem (clamping)
-    if (v_battery >= LIPO_MAX_VOLTAGE)
-    {
-        return 100;
-    }
-    if (v_battery <= LIPO_MIN_VOLTAGE)
-    {
-        return 0;
-    }
-    
-    // 4. Obliczenie procentu naładowania (liniowo pomiędzy MIN a MAX)
-    float percentage = ((v_battery - LIPO_MIN_VOLTAGE) / (LIPO_MAX_VOLTAGE - LIPO_MIN_VOLTAGE)) * 100.0f;
-    
-    return (uint8_t)percentage;
-}
-
-void CalculateMeanADC(void)
-{
-    uint32_t sum = 0;
-    for (int i = 0; i < ADC_SIZE; i++) {
-        sum += AdcData[i];
-    }
-    Mean = sum / ADC_SIZE;
-}
-*/
-
-
-
 
 void Action_ChangeContrast()
 {
@@ -512,4 +479,50 @@ void HAL_ADC_REG_DataTransferCpltCallback(hal_adc_handle_t *hadc)
     //HAL_GPIO_TogglePin(LED_PORT, LED_PIN); // Toggle the LED state
     Console.NeedsRedraw = 1; // Request a redraw of the console
   }
+}
+
+
+
+//emergency shutdown
+void System_ExecuteEmergencyShutdown(void)
+{
+    // 1. Zablokowanie przerwań (Zatrzymujemy obsługę Timerów, DMA, itp.)
+   
+
+    // 2. Wizualne ostrzeżenie gracza
+    SSD1306_Clear(BLACK);
+    GFX_DrawString(10, 20, "BATTERY CRITICAL", WHITE, BLACK);
+    GFX_DrawString(15, 40, "TURN OFF DEVICE", WHITE, BLACK);
+    SSD1306_Display(&OLED);
+
+    // Sprzętowa pętla opóźniająca (~2 sekundy), aby gracz zauważył komunikat
+    HAL_Delay(2000);
+
+    // 3. Twarde wygaszenie matrycy OLED
+    SSD1306_Command(&OLED, 0xAE); 
+
+    // ------------------ NOWY STANDARD HAL PWR ------------------
+    __disable_irq();
+    // 4. Zabezpieczenie I/O przed wyciekiem prądu (Zjawisko Floating Pins).
+    // Funkcja z linii 618 Twojego pliku. "Zamraża" stan logiczny pinów, 
+    // zapobiegając ucieczce prądu przez podciągnięcia ekranu/przycisków.
+    HAL_PWR_LP_EnableIORetention(HAL_PWR_IO_RETENTION_ALL);
+
+    // 5. Wyczyszczenie duchów przeszłości.
+    // Usuwamy stare flagi Standby/Stop, jeśli układ poprzednio z nich wyszedł.
+    // Funkcja z linii 462 Twojego pliku.
+    HAL_PWR_CleanPreviousSystemPowerMode();
+
+    // 6. Wyczyszczenie wszystkich flag wybudzenia. 
+    // Jeśli jakikolwiek przycisk wybudzający został wciśnięty wcześniej,
+    // musimy to anulować, inaczej procesor zaśnie i wybudzi się w tej samej mikrosekundzie.
+    // Funkcja z linii 255 Twojego pliku.
+    HAL_PWR_LP_CleanWakeupSource(HAL_PWR_WAKEUP_SOURCE_ALL);
+
+    // 7. Śmierć rdzenia i wejście w najgłębszy sen (Wait For Interrupt w domenie Standby)
+    // Funkcja z linii 361 Twojego pliku.
+    HAL_PWR_EnterStandbyMode();
+
+    // Wykonanie kodu w architekturze ARM nigdy nie powinno dotrzeć do tego miejsca.
+    while(1); 
 }
