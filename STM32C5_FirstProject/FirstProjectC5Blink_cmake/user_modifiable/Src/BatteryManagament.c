@@ -9,17 +9,16 @@
 
 #define LIPO_CRITICAL_VOLTAGE 3200UL // 3.20V
 /* 
- * ZMIENNE PRYWATNE (static)
- * Niewidoczne dla pliku main.c, nie kolidują z resztą programu.
+ *static variables to hold mean values and current battery voltage   
  */
 static uint16_t Mean_VBAT = 0;
 static uint16_t Mean_VREFINT = 0;
 static uint32_t CurrentBatteryVoltage = 0;
 
 /*
- * FUNKCJE PRYWATNE (static)
+ * PRIVATE FUNCTIONS
  */
-// Odpowiada za obliczenie średniej z bufora DMA
+// Calculate mean values of ADC data for battery and VREFINT channels
 static void CalculateMeanADC(const uint16_t* adc_buffer, uint16_t buffer_size)
 {
     uint32_t sum_vbat = 0;
@@ -36,24 +35,23 @@ static void CalculateMeanADC(const uint16_t* adc_buffer, uint16_t buffer_size)
     Mean_VREFINT = sum_vrefint / (buffer_size / 2);
 }
 
-// Odpowiada za czystą matematykę sprzętową z kompensacją
+// Calculate the real battery voltage in millivolts based on mean ADC values    
 static uint32_t Battery_CalculateRealMillivolts(void)
 {
-    if (Mean_VREFINT == 0) return 0; // Zabezpieczenie przed zerem
+    if (Mean_VREFINT == 0) return 0; //defensive programming - avoid division by zero
 
     uint16_t factory_vrefint_cal = *(__IO uint16_t *)LL_ADC_VREFINT_CAL_ADDR;
     
-    // Używamy uint64_t do ochrony przed przepełnieniem podczas mnożenia
     uint64_t numerator = (uint64_t)LL_ADC_VREFINT_CAL_VREF * factory_vrefint_cal * Mean_VBAT;
     uint32_t denominator = Mean_VREFINT * ADC_FULL_SCALE;
     
     uint32_t pin_voltage_mv = (uint32_t)(numerator / denominator);
     
-    return pin_voltage_mv * 2; // Dzielnik sprzętowy x2
+    return pin_voltage_mv * 2; // voltage devider ratio is 2:1, so multiply by 2 to get the actual battery voltage
 }
 
 /*
- * FUNKCJE PUBLICZNE (Zdefiniowane w .h)
+ * PUBLIC FUNCTIONS
  */
 void Battery_Update(const uint16_t* adc_buffer, uint16_t buffer_size)
 {
@@ -71,11 +69,11 @@ uint32_t Battery_GetVoltage(void)
 
 uint8_t Calculate_Battery_Percentage(uint32_t battery_voltage_mv)
 {
-    // Zabezpieczenie przed wartościami poza zakresem
+    // defend against out-of-range values
     if (battery_voltage_mv >= LIPO_MAX_VOLTAGE) return 100;
     if (battery_voltage_mv <= LIPO_MIN_VOLTAGE) return 0;
 
-    // Obliczenie procentu naładowania
+    // battery percentage calculation based on linear interpolation between min and max voltage
     float percentage = ((float)(battery_voltage_mv - LIPO_MIN_VOLTAGE) / 
                         (LIPO_MAX_VOLTAGE - LIPO_MIN_VOLTAGE)) * 100.0f;
 
@@ -85,8 +83,11 @@ uint8_t Calculate_Battery_Percentage(uint32_t battery_voltage_mv)
 
 uint8_t Battery_IsCritical(void)
 {
-    // Jeśli napięcie zostało już zmierzone (>0) i spadło poniżej progu, zwróć 1 (PRAWDA)
-    if (CurrentBatteryVoltage > 0 && CurrentBatteryVoltage <= LIPO_CRITICAL_VOLTAGE) 
+    // defend against out-of-range values
+    if (CurrentBatteryVoltage == 0) return 0;
+
+    // If the battery voltage has been measured and is below the critical threshold, return 1 (TRUE)
+    if (CurrentBatteryVoltage <= LIPO_CRITICAL_VOLTAGE) 
     {
         return 1;
     }
