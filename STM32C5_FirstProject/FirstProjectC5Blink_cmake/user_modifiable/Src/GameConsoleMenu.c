@@ -42,6 +42,10 @@ const GameMode_t GameModes[] = {
 	{"NORMAL", NORMAL},
 	{"HARD",   HARD}
 };
+const MenuItem_t AboutMenuItems[] = {
+    // Text       // Type         // Stan docelowy      // Action
+    {"Back",      ITEM_FOLDER,    STATE_MAIN_MENU,      NULL}
+};
 
 /**
  * @brief Initialize console to basic state
@@ -78,6 +82,10 @@ static void Get_Active_Menu_Data(GameConsoleState_t State, const MenuItem_t** Ou
         case STATE_GAMES_MENU:
             *OutMenuArray = GamesMenuItems;
             *OutSize = ARRAY_SIZE(GamesMenuItems);
+            break;
+        case STATE_INFO_MENU:
+            *OutMenuArray = AboutMenuItems;
+            *OutSize = ARRAY_SIZE(AboutMenuItems);
             break;
         default:
             // Zabezpieczenie przed błędem - domyślnie wracamy do głównego menu
@@ -295,14 +303,24 @@ void Console_Draw(GameConsole_t *Console, SSD1306_t *Display)
 
 		break;
 		case STATE_INFO_MENU:		//printf info title
-			GFX_DrawString(25, y_pos, "--- ABOUT ---",  WHITE, 0);
+            GFX_DrawString(25, y_pos, "--- ABOUT ---",  WHITE, 0);
+            
+            
+            GFX_DrawString(5, 16, "Made by Jakub Dryla", WHITE, BLACK);
+            GFX_DrawString(5, 26, "YT- Always Iterate", WHITE, BLACK);
+            GFX_DrawString(5, 36, "Version 0.6", WHITE, BLACK);
 		break;
 	}
 
 	//Display page all
 		for (int8_t i = 0; i < CurrentMenuSize; i++)
 		{
-			y_pos = 15 + (i * 12);
+                // NOWY KOD: Logika pozycjonowania (spychanie przycisku Back)
+            if (Console->CurrentSystemState == STATE_INFO_MENU) {
+                y_pos = 52; // Twarde zepchnięcie jedynego przycisku (Back) na sam dół ekranu (SSD1306 ma 64 piksele wys.)
+            } else {
+                y_pos = 15 + (i * 12); // Standardowe pozycjonowanie dla reszty menu
+            }
 
 			// Rysujemy wskaźnik (kursor)
 			if (i == Console->MenuCursorIndex)

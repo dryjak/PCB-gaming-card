@@ -387,12 +387,12 @@ void ToggleLed(void)
 }
 void TurnLedOff(void)
 {
-	HAL_GPIO_WritePin(LED_PORT, LED_PIN, HAL_GPIO_PIN_RESET);
+	//HAL_GPIO_WritePin(LED_PORT, LED_PIN, HAL_GPIO_PIN_RESET);
 	ButtonPressedFlag = 0;
 }
 void TurnLedOn(void)
 {
-	HAL_GPIO_WritePin(LED_PORT, LED_PIN, HAL_GPIO_PIN_SET);
+	//HAL_GPIO_WritePin(LED_PORT, LED_PIN, HAL_GPIO_PIN_SET);
 	ButtonPressedFlag = 1;
 }
 
