@@ -31,7 +31,8 @@
 
 #include "GameSnake.h"
 #include "GameFlappy.h"
-#include "stm32c5xx_hal_tim.h"
+#include "BatteryManagament.h"
+#include "stm32c5xx_hal_pwr.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -40,10 +41,11 @@
 /* Private define ------------------------------------------------------------*/
 
 /*Configure adc*/
-#define ADC_RESOLUTION      4095.0f // Max value for 12-bit ADC (2^12 - 1)
+#define ADC_RESOLUTION      4095 // Max value for 12-bit ADC (2^12 - 1)
+
 #define V_REF               3.3f    // Ref voltage for ADC (3.3V)
 #define DIVIDER_RATIO       2.0f    // Voltage divider ratio (assuming equal resistors, Vout = Vin / 2)
-#define ADC_SIZE 5
+#define ADC_SIZE 10                 // Number of ADC samples to average for voltage measurement
 
 /*Lipo 1s*/
 #define LIPO_MAX_VOLTAGE    4.2f    // Max voltage for fully charged LiPo battery
@@ -54,9 +56,11 @@
 //table for ADC DMA
 volatile uint16_t AdcData[ADC_SIZE] = {0};
 uint8_t DataReadyFlag = 0; //ADC data ready flag
-volatile uint8_t Debug = 1;
-uint8_t BatteryPercentage = 0;
-volatile uint16_t Mean = 0; //Mean value of ADC, calculated in main loop
+
+
+uint32_t counter = 0;
+volatile uint32_t BatteryVoltage = 0;
+uint8_t BatteryPercentage = 0; // Global variable to hold battery percentage
 
 float v_pin = 0.0f; // Voltage at the ADC pin (after voltage divider)
 uint8_t BatteryEmptyFlag = 0; // Flag to indicate if battery is empty (below minimum voltage)
@@ -76,11 +80,17 @@ GameConsole_t Console;
 
 uint8_t value = 0xAE;
 /* Private functions prototype -----------------------------------------------*/
+//batery management
+extern uint8_t ShowBatteryWarning; //from BatteryManagement.c
+void System_ExecuteEmergencyShutdown(void);
+
+
 void Action_ChangeContrast();
 
 //ADC mean value calculation
 void CalculateMeanADC(void);
-uint8_t Calculate_Battery_Percentage(uint16_t adc_value);
+uint32_t Battery_GetRealMillivolts(void);
+
 
 //Wrapper
 void Action_MenuUp(void);
@@ -184,7 +194,7 @@ int main(void)
       HAL_GPIO_WritePin(LED_PORT, LED_PIN, HAL_GPIO_PIN_RESET);
       HAL_Delay(1000);
 
-      Debug = 0;
+      //Debug = 0;
 
     while (1) 
     {      
@@ -195,6 +205,16 @@ int main(void)
       ButtonTask(&Left);
       ButtonTask(&Right);
 
+      //batery management
+        if(DataReadyFlag == 1)
+      {
+        DataReadyFlag = 0; 
+        Battery_Update((uint16_t*)AdcData, ADC_SIZE);
+        BatteryVoltage = Battery_GetVoltage();
+        BatteryPercentage = Calculate_Battery_Percentage(BatteryVoltage);   
+      }
+
+        //User interface logic
       if (Console.CurrentSystemState == STATE_GAME_SNAKE)
       {
         Snake_UpdateLogic();
@@ -220,17 +240,27 @@ int main(void)
         Console_Draw(&Console, &OLED);
       }
 
-      if(DataReadyFlag == 1)
-      {
-        DataReadyFlag = 0; // Clear the flag
-        CalculateMeanADC();
-        BatteryPercentage = Calculate_Battery_Percentage(Mean);
-      }
+
+
+      //TODO: print battery level warning on OLED
+        // if (ShowBatteryWarning == 1)
+        // {
+        //     // Rysuje małą, inwazyjną flagę w rogu ekranu, żeby gracz wiedział o końcu energii
+        //     GFX_DrawFillRectangle(100, 0, 28, 10, BLACK); // Tło dla czytelności
+        //     GFX_DrawString(102, 2, "LOW!", WHITE, BLACK);
+        //     SSD1306_Display(&OLED); 
+        // }
+
+
+
+
       HAL_Delay(10);
 
     timer_counter = HAL_TIM_GetCounter(mx_tim2_gethandle());
     }
   }
+
+  
  
 } /* end main */
 
@@ -238,6 +268,48 @@ int main(void)
 
 //Private functions
 
+/* for now do not make emergency shutdown
+void System_ExecuteEmergencyShutdown(void)
+{
+    __disable_irq();
+
+    SSD1306_Clear(BLACK);
+    GFX_DrawString(10, 20, "BATTERY CRITICAL", WHITE, BLACK);
+    GFX_DrawString(15, 40, "TURN OFF DEVICE", WHITE, BLACK);
+    SSD1306_Display(&OLED);
+
+    for(volatile uint32_t i = 0; i < 5000000; i++) { __NOP(); }
+
+    SSD1306_Command(&OLED, 0xAE); 
+
+    // 1. Dostęp do domeny Backup (RTC, rejestry podtrzymywane). 
+    // W niektórych wersjach HAL2 ta funkcja została przeniesiona do RTC lub zmieniła nazwę.
+    // Najczęstszy współczesny odpowiednik to:
+    //HAL_PWR_EnableBkUpAccess();
+
+    // 2. Czyszczenie flag wybudzenia (WUF - Wake Up Flags).
+    // W nowym HAL-u zazwyczaj czyścimy wszystkie flagi naraz za pomocą funkcji z przyrostkiem Ex (Extended),
+    // lub sprecyzowanego makra dla konkretnego pinu (np. PWR_FLAG_WUF1).
+    // Spróbuj użyć współczesnego standardu:
+#if defined(PWR_WAKEUP_FLAG_ALL)
+    __HAL_PWR_CLEAR_WAKEUP_FLAG(PWR_WAKEUP_FLAG_ALL); // Wariant A (Makro)
+#else
+    // Wariant B (częsty w najnowszych bibliotekach LL/HAL2)
+    // HAL_PWREx_ClearWakeupFlag(PWR_FLAG_WUF); 
+#endif
+
+    // 3. Wejście w tryb Standby.
+    // W HAL2 funkcja ta czasem wymaga jawnego podania sposobu uśpienia krzemu.
+    // Jeśli HAL_PWR_EnterSTANDBYMode() wyrzuca błąd "too few arguments", 
+    // nowa składnia w HAL2 często wygląda tak:
+    // HAL_PWR_EnterSTANDBYMode(PWR_STANDBY_ENTRY_WFI); 
+    HAL_PWR_EnterStandbyMode();
+
+    while(1); 
+}
+*/
+
+/*
 uint8_t Calculate_Battery_Percentage(uint16_t adc_value)
 {
     // 1. Obliczenie napięcia na wejściu ADC (za dzielnikiem)
@@ -270,6 +342,10 @@ void CalculateMeanADC(void)
     }
     Mean = sum / ADC_SIZE;
 }
+*/
+
+
+
 
 void Action_ChangeContrast()
 {
@@ -346,7 +422,7 @@ void Action_MenuUp(void) {
         Console_MoveUp(&Console);
     }
     TurnLedOn();
-    Debug++;
+    //Debug++;
 }
 
 void Action_MenuDown(void) {
@@ -360,7 +436,7 @@ void Action_MenuDown(void) {
         Console_MoveDown(&Console);
     }
     TurnLedOn();
-    Debug--;
+    //Debug--;
 }
 
 void Action_MenuEnter(void) {

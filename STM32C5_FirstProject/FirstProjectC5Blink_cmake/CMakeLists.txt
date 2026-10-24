@@ -9,7 +9,9 @@ include(cmake/target.cmake)
 include(cmake/${TOOLCHAIN_FILE})
 
 project(FirstProjectC5Blink)
-add_executable(FirstProjectC5Blink)
+add_executable(FirstProjectC5Blink
+  user_modifiable/Inc/GameSnake.h
+  user_modifiable/Inc/GameConsoleMenu.h)
 include(cmake/files.cmake)
 include(cmake/flags.cmake)
 include(cmake/components.cmake)
@@ -19,8 +21,11 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
   # Add additional source files here
   user_modifiable/Src/SSD1306_OLED.c
   user_modifiable/Src/GFX_BW.c
-
-
+  user_modifiable/Src/Button.c
+  user_modifiable/Src/GameConsoleMenu.c
+  user_modifiable/Src/GameSnake.c
+  user_modifiable/Src/GameFlappy.c
+  user_modifiable/Src/BatteryManagament.c
 )
 
 target_include_directories(${CMAKE_PROJECT_NAME} PUBLIC
